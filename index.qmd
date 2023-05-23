@@ -5,7 +5,7 @@ title: Curried functions in R
 subtitle: Examples with `purrr` and `ggplot2`
 # subtitle
 # excerpt
-date: "2023-05-16"
+date: "2023-05-23"
 knitr:
     opts_chunk:
         eval: true
