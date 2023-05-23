@@ -1,0 +1,262 @@
+---
+author: Michael DeCrescenzo
+categories: [code, r]
+title: Curried functions in R
+subtitle: Examples with `purrr` and `ggplot2`
+# subtitle
+# excerpt
+date: "2023-05-16"
+knitr:
+    opts_chunk:
+        eval: true
+        include: true
+        collapse: true
+draft: false
+---
+
+This post describes a common tool in functional programming known as _curried_ functions (a.k.a. partial functions).
+
+We show how to use them with examples in the R plotting library `ggplot2`, which presents many currying opportunities.
+
+## In short,
+
+A _curried_ function is a function with some of its arguments fixed.
+A curried function is also called a "partial" function, because its arguments have been partially pre-supplied.
+
+Currying a function with arguments isn't the same as _calling_ a function with those arguments.
+Currying doesn't call the function.
+It creates a new function.
+
+Here is a silly example in R.
+You have some logical vector `b`.
+What is its mean?
+
+```{R}
+b = c(TRUE, FALSE, NA, FALSE, TRUE, TRUE)
+mean(b)
+```
+
+Well, `b` is missing some data, so its mean is undefined.
+You can get around this by passing an argument to the `mean` function that ignores `NA` values.
+
+```{R}
+mean(b, na.rm = TRUE)
+```
+
+And that works okay, but it's a function of two arguments.
+We could imagine a function that does the same thing with only one argument...
+
+```{R}
+unsafe_mean = function(x) mean(x, na.rm = TRUE)
+```
+
+This is, in essence, the same result as a partial function.
+But we normally create a partial function by _passing_ a function as an argument and returning a new function.
+It looks like this:
+
+```{R}
+library(purrr)  # contains `partial`
+unsafe_mean = partial(mean, na.rm = TRUE)
+```
+
+This code says, "create a new function that is like `mean` but with the `na.rm` argument fixed to `TRUE`".
+Importantly, we don't have to _call_ this function yet.
+We only create it once, and then we can use it wherever.
+
+```{R}
+unsafe_mean(b)
+```
+
+
+## Examples with `ggplot`
+
+### Aesthetic regularities
+
+Sometimes you want to re-use some aesthetic feature of a plot across multiple plot components or across multiple plots.
+These features may be reusable but fall short of being "defaults" that you want to set.
+This is a good place for partial functions.
+
+Here is an example where I want to plot two histograms side by side.
+Without partial functions, I might do this the "long way" with multiple calls to `geom_histogram`.
+
+```{R}
+library(tibble)
+library(ggplot2)
+
+# first, some data...
+d = tibble(
+    z = rnorm(10000, mean = 0, sd = 1),
+    e = 2 * z + 3
+)
+
+ggplot(d) +
+    geom_histogram(aes(x = z), bins = 100, color = "white", alpha = 0.8, fill = "tomato") +
+    geom_histogram(aes(x = e), bins = 100, color = "white", alpha = 0.8, fill = "lightblue") +
+    labs(x = "variable") +
+    theme_minimal()
+```
+
+This works, but I specified the `color` and `alpha` information multiple times.[^longer]
+Here is the same plot with a partial function approach:
+
+```{R}
+# create a new histogram function w/ arguments fixed
+geom_hist_rv = partial(geom_histogram, bins = 100, color = 'white', alpha = 0.8)
+
+# apply our function
+ggplot(d) +
+    geom_hist_rv(aes(x = z), fill = "tomato") +
+    geom_hist_rv(aes(x = e), fill = "lightblue") +
+    labs(x = "variable") +
+    theme_minimal()
+```
+
+Notice we basically eliminated all redundant information out of the specification of the histograms.
+Call that a win.
+
+[^longer]: I could "pivot" the data longer and create just one `geom_histogram` while mapping `fill` to the new `name` variable, but I don't believe that's the appropriate move here.
+    This is a case where the plotting framework need not "flow backward" into our data framework.
+    I consider that a code smell and may discuss that in a future post.
+    We can achieve what we want without expensively reshaping the data.
+
+
+### Scale functions
+
+When you are working for a while in one project, you are often mapping the same features in your data to the same colors, fills, point shapes, and so on.
+This leads you to write repeated calls of `scale_color_manual(values = c(...))`.
+It can be quite tedious.
+
+But you can create your own `scale_` functions that match the semantics of your projects by currying the built-in `scale_` functions.
+For instance, if I always want certain species in the `palmerpenguins` data to map to the same colors, I simply write some functions...
+
+```{R}
+# a map / vector of key-value pairs
+peng_colors = c("Adelie" = "violet", "Chinstrap" = "goldenrod", "Gentoo" = "darkcyan")
+
+# invoke the map
+scale_color_species = partial(scale_color_manual, values = peng_colors)
+scale_fill_species = partial(scale_fill_manual, values = peng_colors)
+```
+
+And now I can use those wherever I want with no extra fuss.
+
+```{R}
+library(palmerpenguins)
+
+ggplot(penguins) +
+    aes(x = body_mass_g, y = flipper_length_mm, color = species, fill = species) +
+    geom_point() +
+    geom_smooth(method = "lm") +
+    scale_color_species() +
+    scale_fill_species()
+```
+
+
+## Why use partial functions?
+
+By fixing a function's arguments, it may seem like we are restricting a function's behavior.
+And restricting a functions behavior may not seem like a good thing to do when I could have a more general, more flexible function.
+After all, the point of a function having arguments is to enhance its flexibility, right?
+
+There are a few reasons.
+
+1. **Convenience.**
+   If you are toggling between invoking some arguments some times but not other times, it really is no big deal to have another function instead of juggling the arguments yourself.
+   This can be especially useful if the argument provision is repetitive and error-prone, as it can be with plotting.
+   Our examples show how we can lock these arguments into their own functions, so we no longer have to worry about introducing bugs or inconsistencies in our code by misspecifying their "free" variables.
+
+2. **Composition.**
+   This is crucial.
+   Functional programming makes heavy use of function composition (creating new functions from existing functions).
+   For instance, we can rewrite `x |> f() |> g()` as `x |> h()`, where `h` is the function composition of `g` and `f`.
+   Composition works when the output of the first function `f` can serve as the input to the next function `g`, and this works great in R when your `g` takes one argument.
+   But what if your `g` needs multiple arguments?
+   No fear, we could create a partial `g` that fixes some arguments ahead of time, and use that to create our composed function `h`.
+
+3. **Abstraction**.
+   If you think about a function that takes more than one argument, is any single argument the "primary" argument?
+   In a specific context that may _informally_ make sense, but in no formal sense is that true.
+   Thinking about our `mean` example above.
+   The function `mean` takes two arguments (it actually takes more, but let's consider `x` and `na.rm` only).
+   We created an `unsafe_mean` function that fixes `na.rm`.
+   But there just as easily we could have fixed the data argument,
+   ```{R}
+   b_mean = partial(mean, x = b)
+   ```
+   and now we can call this function by passing `na.rm = TRUE`.
+   ```{R}
+   b_mean(na.rm = TRUE)
+   ```
+   ...or by passing nothing at all! Which would use the base function's defaults.
+   ```{R}
+   b_mean()
+   ```
+   This is obviously a weird example, but I am trying to get you to embrace that weird.
+
+   You can imagine other examples, like `lm` or `glm`.
+   Are `lm` and `glm` functions of regression formulae, or are they functions of datasets?
+   We could fix the formula and let the dataset vary...
+   ```{R}
+   apply_reg = partial(lm, formula = y ~ x + z + w)
+   ```
+   Or we could fix the dataset and let the formula vary:
+   ```{R}
+   reg_on_penguins = partial(lm, data = palmerpenguins)
+   ```
+   Both of these partial functions are valid.
+   Mathematically it makes no difference.
+
+These sorts of abstraction and compositions enable us to be creative even while we are supposedly "restricting" the behavior of functions.
+The creativity comes not from "what arguments can we supply to this function" but rather "what meta-structures can I build by composing functional routines that share certain patterns".
+This brings us to some higher points about functions and functional programming in R.
+
+
+## Functions are objects
+
+In R we like to say "everything is an object".
+We can break this down into a couple important properties.
+First, we can ask about the properties of functions as if they were any other data.
+
+```{R}
+attributes(unsafe_mean)
+```
+
+We can pass functions as arguments to other functions.
+You may have seen this with `apply` functions or `purrr::map`.
+
+```{R}
+mtcars |> lapply(unsafe_mean) |> head()
+```
+
+And we can return functions as values from other functions.
+
+```{R}
+# take in a function f and return a "lifted" function that applies f to a list
+fmap = function(f) {
+    function(lst) lapply(lst, f)
+}
+
+mtcars |> fmap(unsafe_mean)() |> head()
+```
+
+In this example, `fmap` is a higher-order function (a function of a function).
+The value `fmap(unsafe_mean)` is itself a function.
+It waits for the user to pass it a list.
+
+We could combine what we've learned here and make the `fmap` example even more disorienting.
+
+```{R}
+# create a function composition g . f
+compose = function(g, f) {
+    function(...) g(f(...))
+}
+
+compose(head, fmap(unsafe_mean))(mtcars)
+
+# or ...
+mtcars |> compose(head, fmap(unsafe_mean))()
+```
+
+So you see, you can create many odd things by treating functions as first-class objects.
+This particular example is a bit of an ugly monster, but again, we are practicing with the abstractions more than anything.
+
