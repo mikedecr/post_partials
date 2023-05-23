@@ -22,6 +22,7 @@ We show how to use them with examples in the R plotting library `ggplot2`, which
 
 A _curried_ function is a function with some of its arguments fixed.
 A curried function is also called a "partial" function, because its arguments have been partially pre-supplied.
+The name comes from Haskell Curry, who was a mathematician and not a food, although I love to eat curries too.
 
 Currying a function with arguments isn't the same as _calling_ a function with those arguments.
 Currying doesn't call the function.
