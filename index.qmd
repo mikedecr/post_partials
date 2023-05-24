@@ -219,29 +219,6 @@ There are a few perfectly good reasons.
    Both of these partial functions are valid.
    Mathematically it makes no difference.
 
-   One last weirdness.
-   If I have a list `p` containing a mapping from `"a"` to `9`.
-   ```{R}
-   p = list(a = 9)
-   ```
-   And I index this list to convert an `"a"` to a `9`...
-   ```{R}
-   p[["a"]]
-   ```
-   then this mapping is sort of like a function.
-   But what is the function, and what is the argument?
-   Is `9` the value of a function `p` if I pass a string argument `"a"`?
-   Or is `9` the value of a function `"a"` if I pass a list argument `p`?
-   You can write functions intended to give you either brainfeel.
-
-   ```{R}
-   index = function(lst, k) lst[[k]]
-   p |> index("a")
-
-   key_into = function(k, lst) lst[[k]]
-   "a" |> key_into(p)
-   ```
-
 These abstractions and compositions let us be creative even while we are supposedly "restricting" the behavior of functions.
 The creativity comes not from "how many different argument configurations can I supply to this function" but rather "what meta-structures can I build by building functional routines that support certain patterns".
 This brings us to some higher points about functions and functional programming in R.
@@ -279,6 +256,4 @@ map_unsafe_mean(mtcars) |> head()
 In this example, `fmap` is a higher-order function (a function of a function).
 The value `fmap(unsafe_mean)` is itself a function.
 It waits for the user to pass it a list.
-
-So you see, you can create many odd things by treating functions as first-class objects, letting functions be arguments and values to other functions, even thinking about non-function objects as behaving "sort of like functions".
 
