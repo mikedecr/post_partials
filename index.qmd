@@ -105,7 +105,7 @@ Passing a container of arguments may feel odd at first, but it actually very use
 This gives us a sublanguage where we can imagine that _every function_ takes only one object as its argument and returns only one object as its value...it's just that some objects are cheekily more complex than others.
 You may have seen something similar in Python, but instead of a higher order function, you have tuple and dictionary unpacking.
 So you can write `mean(*(x, TRUE))` or `mean(**{'x': x, 'na.rm': TRUE})` and get the same effect.
-From a functional programming point of view, there isn't much difference a tuple and an unnamed list (each is essentially an ordered set of values) or between a dict and a named list (each is a set of named values, at which point who cares about the ordering [although you can maybe think of the names as isomorphic to an ordering {but we shouldn't talk about isomorphism right now}]).
+From a functional programming point of view, there isn't much difference between a tuple and an unnamed list (each is essentially an ordered set of values) or between a dict and a named list (each is a set of named values, at which point who cares about the ordering [although you can maybe think of the names as isomorphic to an ordering {but we shouldn't talk about isomorphism right now}]).
 We may have to write a blog post with more creative uses of `do.call`.
 
 
