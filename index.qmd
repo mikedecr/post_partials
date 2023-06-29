@@ -31,7 +31,7 @@ Here is a silly example in R.
 You have some logical vector `b`.
 What is its mean?
 
-```{R}
+```{r}
 b = c(TRUE, FALSE, NA, FALSE, TRUE, TRUE)
 mean(b)
 ```
@@ -39,7 +39,7 @@ mean(b)
 Well, `b` is missing some data, so the mean is undefined.
 You can get around this by passing an extra argument to skip over any `NA` elements.
 
-```{R}
+```{r}
 mean(b, na.rm = TRUE)
 ```
 
@@ -47,26 +47,66 @@ And that works okay, but it's a function of two arguments.
 We could imagine a function that achieves the same result with just one argument.
 Let's create this function with currying.
 
-```{R}
-library(purrr)  # contains `partial`
-unsafe_mean = partial(mean, na.rm = TRUE)
+```{r}
+# purrr has a partial() function
+unsafe_mean = purrr::partial(mean, na.rm = TRUE)
 ```
 
 This code says, "create a new function that is like `mean` but with the `na.rm` argument fixed to `TRUE`".
 The value that we assign to `unsafe_mean` is a new function.
 We don't have to call it until we need it.
 
-```{R}
+```{r}
 unsafe_mean(b)
 ```
 
 The curried function is morally the same thing as defining this new function "the long way",
 
-```{R}
+```{r}
 unsafe_mean = function(x) mean(x, na.rm = TRUE)
 ```
 
 which has a bit more boilerplate involved.
+
+
+## Writing our own `partial`
+
+We can write out own currying function.
+It is a higher-order function that eats a function and returns a new function.
+Let's take a look.
+
+```{r}
+partial = function(f, ...) {
+    fixed = list(...)
+    g = function(...) {
+        all_args = c(fixed, list(...))
+        do.call(f, all_args)
+    }
+    return(g)
+}
+```
+
+- `partial` takes a function `f` and some unspecified arguments `...`.
+  These are the arguments that we will fix.
+  We store them in a list called `fixed`.
+- We then return a _new_ function, which I name `g` just to make it easier to keep track of.
+  `g` is our curried function, it is like `f` but it knows the arguments we have already provided.
+  `g` combines the `fixed` arguments with any new arguments provided when it is called (the second set of dots `...`, which are different from the first set) and uses `do.call` to call `f` on those arguments.
+
+There are a couple extra things to note.
+For the outer set of `fixed` arguments, we could have captured them _unevaluated_, and delay their evaluation until the `g` call.
+This would most accurately reflect what we want our pre-supplied arguments to mean when we call the curried function later, and it is what Konrad Rudolph does in his [currying function](https://github.com/klmr/fun/blob/898148c5b89bccc10ccadf960b81fab0543e97af/__init__.r#L85-L134).
+It is a bit beyond the scope our needs right now though.
+
+Secondly, take a second to appreciate the use of `do.call` to evaluate our function with all of its arguments.
+If you aren't familiar with `do.call`, it is a higher order function that evaluates a function (the first argument) with the arguments provided through a list (the second argument).
+Imagine instead of writing `mean(x, na.rm = TRUE)`, you write `do.call(mean, list(x = x, na.rm = TRUE))`.
+Passing a container of arguments may feel odd at first, but it actually very useful for functional programming because we can rewrite any multi-argument function as a function of only one argument: a list.
+This gives us a sublanguage where we can imagine that _every function_ takes only one object as its argument and returns only one object as its value...it's just that some objects are cheekily more complex than others.
+You may have seen something similar in Python, but instead of a higher order function, you have tuple and dictionary unpacking.
+So you can write `mean(*(x, TRUE))` or `mean(**{'x': x, 'na.rm': TRUE})` and get the same effect.
+From a functional programming point of view, there isn't much difference a tuple and an unnamed list (each is essentially an ordered set of values) or between a dict and a named list (each is a set of named values, at which point who cares about the ordering [although you can maybe think of the names as isomorphic to an ordering {but we shouldn't talk about isomorphism right now}]).
+We may have to write a blog post with more creative uses of `do.call`.
 
 
 ## Examples with `ggplot`
@@ -87,7 +127,7 @@ Without partial functions, I might do this the "long way" with multiple calls to
     I consider that that backward flow a code smell in many cases, and I plan to discuss it in a future post.
 
 
-```{R}
+```{r}
 library(tibble)
 library(ggplot2)
 
@@ -109,7 +149,7 @@ This is annoying and potentially error-prone, and if I want to change some of th
 
 Here is the same plot with a partial function approach:
 
-```{R}
+```{r}
 # create a new histogram function w/ arguments fixed
 geom_hist_rv = partial(geom_histogram, bins = 100, color = 'white', alpha = 0.8)
 
@@ -137,7 +177,7 @@ You can write these new functions one time and save yourself the effort elsewher
 
 For instance, if I always want certain species in the `palmerpenguins` data to map to the same colors, I can write some functions...
 
-```{R}
+```{r}
 # a vector of key-value pairs, species to color
 peng_colors = c("Adelie" = "violet", "Chinstrap" = "goldenrod", "Gentoo" = "darkcyan")
 
@@ -148,7 +188,7 @@ scale_fill_species = partial(scale_fill_manual, values = peng_colors)
 
 And now I can employ those visual standards wherever I want.
 
-```{R}
+```{r}
 library(palmerpenguins)
 
 ggplot(penguins) +
@@ -193,15 +233,15 @@ There are a few perfectly good reasons.
    The `mean` function takes two arguments (it can actually take more, but let's set them aside).
    We created an `unsafe_mean` function that fixes `na.rm`.
    But just as easily we could fixed the data argument `x`,
-   ```{R}
+   ```{r}
    b_mean = partial(mean, x = b)
    ```
    and call this new function by passing `na.rm = TRUE`.
-   ```{R}
+   ```{r}
    b_mean(na.rm = TRUE)
    ```
    ...or by passing nothing at all! Which would use the base function's defaults.
-   ```{R}
+   ```{r}
    b_mean()
    ```
    This is obviously a weird example, but I am trying to get you to embrace that weird.
@@ -209,12 +249,12 @@ There are a few perfectly good reasons.
    You can imagine other examples, like `lm` or `glm`.
    Are `lm` and `glm` functions of regression formulae, or are they functions of datasets?
    We could fix the formula and let the dataset vary...
-   ```{R}
+   ```{r}
    apply_reg = partial(lm, formula = y ~ x + z + w)
    ```
    Or we could fix the dataset and let the formula vary:
-   ```{R}
-   reg_on_penguins = partial(lm, data = palmerpenguins)
+   ```{r}
+   reg_on_penguins = partial(lm, data = penguins)
    ```
    Both of these partial functions are valid.
    Mathematically it makes no difference.
@@ -230,20 +270,20 @@ In R we like to say "everything is an object".
 We can break this down into a couple important properties.
 First, we can ask about the properties of functions as if they were any other data.
 
-```{R}
+```{r}
 attributes(unsafe_mean)
 ```
 
 We can pass functions as arguments to other functions.
 You may have seen this with `apply` functions or `purrr::map`.
 
-```{R}
+```{r}
 lapply(mtcars, unsafe_mean) |> head()
 ```
 
 And we can return functions as values from other functions.
 
-```{R}
+```{r}
 # take in a function f and return a "lifted" function that applies f to a list
 fmap = function(f) {
     function(lst) lapply(lst, f)
